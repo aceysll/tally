@@ -128,7 +128,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="section-title">By account, who logged what</div>
+          <div className="section-title">By account</div>
           {accountRows.map((acc) => (
             <div className="card" style={{ padding: 0, marginBottom: 14 }} key={acc.name}>
               <div className="breakdown-row" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -174,6 +174,8 @@ export default function Dashboard() {
             </div>
           ))}
 
+          {personRows.length > 1 && (
+          <>
           <div className="section-title">By person, across accounts</div>
           <div className="card" style={{ padding: 0 }}>
             {personRows.map(([id, row]) => (
@@ -197,6 +199,8 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+          </>
+          )}
         </>
       )}
     </div>
