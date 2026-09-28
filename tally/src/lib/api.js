@@ -37,6 +37,17 @@ export function createAccount(payload) {
   )
 }
 
+export function updateAccount(id, fields) {
+  return authedFetch('/api/accounts', {
+    method: 'PATCH',
+    body: JSON.stringify({ id, ...fields })
+  }).then((r) => r.account)
+}
+
+export function deleteAccount(id) {
+  return authedFetch('/api/accounts', { method: 'DELETE', body: JSON.stringify({ id }) })
+}
+
 export function joinAccountByCode(code) {
   return authedFetch('/api/join', { method: 'POST', body: JSON.stringify({ code }) }).then(
     (r) => r.account
