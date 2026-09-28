@@ -36,9 +36,10 @@ export default function Dashboard() {
 
     setLoading(true)
     Promise.all([supabase.auth.getUser(), getMyAccounts()])
-      .then(async ([{ data: { user } }]) => {
+      .then(async ([{ data: { user } }, accs]) => {
         setMyId(user.id)
-        const ents = await getEntries(start ? { start } : {})
+        const accountIds = accs.map((a) => a.id)
+        const ents = await getEntries(accountIds.length ? { accountIds, start } : { start })
         setEntries(ents)
       })
       .catch((err) => setError(err.message))
@@ -127,7 +128,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="section-title">By account</div>
+          <div className="section-title">By account, who logged what</div>
           {accountRows.map((acc) => (
             <div className="card" style={{ padding: 0, marginBottom: 14 }} key={acc.name}>
               <div className="breakdown-row" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -173,8 +174,6 @@ export default function Dashboard() {
             </div>
           ))}
 
-          {personRows.length > 1 && (
-          <>
           <div className="section-title">By person, across accounts</div>
           <div className="card" style={{ padding: 0 }}>
             {personRows.map(([id, row]) => (
@@ -198,8 +197,6 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-          </>
-          )}
         </>
       )}
     </div>

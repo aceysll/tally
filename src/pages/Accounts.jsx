@@ -62,7 +62,7 @@ export default function Accounts() {
     try {
       const joined = await joinAccountByCode(joinCode)
       setJoinCode('')
-      setNotice(`Joined "${joined?.name || 'account'}"`)
+      setNotice(`Joined "${joined?.[0]?.name || 'account'}"`)
       await load()
     } catch (err) {
       setError(err.message)

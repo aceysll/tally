@@ -155,13 +155,9 @@ create index entries_account_idx on entries(account_id);
 
 alter table entries enable row level security;
 
-create policy "creator, worked-by person, or owner can view an entry"
+create policy "members can view entries on their accounts"
   on entries for select
-  using (
-    worked_by = auth.uid()
-    or created_by = auth.uid()
-    or exists (select 1 from accounts where id = entries.account_id and owner_id = auth.uid())
-  );
+  using (is_account_member(account_id));
 
 create policy "members can log entries for a fellow member"
   on entries for insert

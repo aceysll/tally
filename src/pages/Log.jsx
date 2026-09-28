@@ -45,7 +45,8 @@ export default function Log() {
         setWorkedBy(user.id)
       }
 
-      const ents = await getEntries({ start: fromNowISO(13) })
+      const accountIds = accs.map((a) => a.id)
+      const ents = await getEntries({ accountIds, start: fromNowISO(13) })
       setEntries(ents)
     } catch (err) {
       setError(err.message)
