@@ -1,20 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
 import { getEntries } from '../lib/api.js'
-
-function startOfWeekISO() {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = day === 0 ? 6 : day - 1 // Monday as start
-  d.setDate(d.getDate() - diff)
-  return d.toISOString().slice(0, 10)
-}
-
-function startOfMonthISO() {
-  const d = new Date()
-  d.setDate(1)
-  return d.toISOString().slice(0, 10)
-}
+import { toISO, payWeek, formatShort } from '../lib/dates.js'
 
 function money(currency, amount) {
   return `${currency}${Number(amount).toLocaleString(undefined, {
@@ -24,35 +11,94 @@ function money(currency, amount) {
 }
 
 const RANGES = [
-  { key: 'week', label: 'This week' },
-  { key: 'month', label: 'This month' },
-  { key: 'all', label: 'All time' }
+  { key: 'week', label: 'Pay week' },
+  { key: 'month', label: 'Month' },
+  { key: 'all', label: 'All time' },
+  { key: 'custom', label: 'Custom' }
 ]
+
+function describePeriod(range, offset, customStart, customEnd) {
+  if (range === 'week') {
+    const { start, end, payDay } = payWeek(offset)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return {
+      start: toISO(start),
+      end: toISO(end),
+      title: `${formatShort(start)} to ${formatShort(end)}`,
+      sub: `${payDay >= today ? 'Pays' : 'Paid'} ${formatShort(payDay)}`
+    }
+  }
+
+  if (range === 'month') {
+    const now = new Date()
+    const first = new Date(now.getFullYear(), now.getMonth() + offset, 1)
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0)
+    return {
+      start: toISO(first),
+      end: toISO(last),
+      title: first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+      sub: ''
+    }
+  }
+
+  if (range === 'custom') {
+    return { start: customStart || undefined, end: customEnd || undefined, title: 'Custom range', sub: '' }
+  }
+
+  return { start: undefined, end: undefined, title: 'All time', sub: '' }
+}
 
 export default function Dashboard() {
   const [myId, setMyId] = useState(null)
   const [range, setRange] = useState('week')
+  const [offset, setOffset] = useState(0)
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    let start
-    if (range === 'week') start = startOfWeekISO()
-    if (range === 'month') start = startOfMonthISO()
+  const period = useMemo(
+    () => describePeriod(range, offset, customStart, customEnd),
+    [range, offset, customStart, customEnd]
+  )
+  const badRange = range === 'custom' && customStart && customEnd && customStart > customEnd
 
+  useEffect(() => {
+    if (badRange) {
+      setEntries([])
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
     setLoading(true)
     setError('')
+
+    const params = {}
+    if (period.start) params.start = period.start
+    if (period.end) params.end = period.end
+
     supabase.auth
       .getUser()
       .then(async ({ data: { user } }) => {
+        const ents = await getEntries(params)
+        if (cancelled) return
         setMyId(user.id)
-        const ents = await getEntries(start ? { start } : {})
         setEntries(ents)
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [range])
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [period.start, period.end, badRange])
 
   const { totalHours, totals, byAccount, byPerson } = useMemo(() => {
     let totalHours = 0
@@ -115,26 +161,77 @@ export default function Dashboard() {
   const accountRows = Object.values(byAccount)
   const personRows = Object.entries(byPerson)
   const anyUnpaid = currencyKeys.some((c) => totals[c].unpaid > 0)
+  const stepping = range === 'week' || range === 'month'
 
   return (
     <div>
       <h1 className="page-title">Dashboard</h1>
       <p className="page-sub">Hours and earnings across every account you're part of.</p>
 
-      <div className="range-tabs">
+      <div className="range-tabs" style={{ flexWrap: 'wrap' }}>
         {RANGES.map((r) => (
-          <button key={r.key} className={range === r.key ? 'active' : ''} onClick={() => setRange(r.key)}>
+          <button
+            key={r.key}
+            className={range === r.key ? 'active' : ''}
+            onClick={() => {
+              setRange(r.key)
+              setOffset(0)
+            }}
+          >
             {r.label}
           </button>
         ))}
       </div>
 
+      {stepping && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            marginBottom: 20
+          }}
+        >
+          <button className="btn-ghost" onClick={() => setOffset(offset - 1)}>
+            ‹ Earlier
+          </button>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{period.title}</div>
+            {period.sub && (
+              <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
+                {period.sub}
+              </div>
+            )}
+          </div>
+          <button className="btn-ghost" disabled={offset >= 0} onClick={() => setOffset(offset + 1)}>
+            Later ›
+          </button>
+        </div>
+      )}
+
+      {range === 'custom' && (
+        <div className="form-row" style={{ marginBottom: 20 }}>
+          <div className="field">
+            <label>From</label>
+            <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>To</label>
+            <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+          </div>
+        </div>
+      )}
+
+      {badRange && (
+        <p style={{ color: 'var(--danger)', fontSize: 13 }}>The "From" date is after the "To" date.</p>
+      )}
       {error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</p>}
 
       {loading ? (
         <p className="empty-state">Loading...</p>
       ) : entries.length === 0 ? (
-        <p className="empty-state">No entries in this range yet.</p>
+        <p className="empty-state">No entries in this period.</p>
       ) : (
         <>
           <div className="stat-grid">

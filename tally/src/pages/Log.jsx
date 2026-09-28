@@ -1,29 +1,37 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
 import { getMyAccounts, getEntries, createEntry, togglePaid, deleteEntry } from '../lib/api.js'
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function fromNowISO(daysAgo) {
-  const d = new Date()
-  d.setDate(d.getDate() - daysAgo)
-  return d.toISOString().slice(0, 10)
-}
+import { todayISO, isoDaysAgo } from '../lib/dates.js'
 
 function formatDateLabel(iso) {
   const d = new Date(iso + 'T00:00:00')
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
+function money(currency, amount) {
+  return `${currency}${Number(amount).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`
+}
+
+const LIST_RANGES = [
+  { days: 14, label: '14 days' },
+  { days: 30, label: '30 days' },
+  { days: 90, label: '90 days' },
+  { days: 0, label: 'All' }
+]
+
 export default function Log() {
   const [myId, setMyId] = useState(null)
   const [accounts, setAccounts] = useState([])
   const [entries, setEntries] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loadingAccounts, setLoadingAccounts] = useState(true)
+  const [loadingEntries, setLoadingEntries] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [listDays, setListDays] = useState(14)
 
   const [accountId, setAccountId] = useState('')
   const [workedBy, setWorkedBy] = useState('')
@@ -32,32 +40,45 @@ export default function Log() {
   const [paid, setPaid] = useState(false)
   const [note, setNote] = useState('')
 
-  async function load() {
-    setLoading(true)
+  async function loadAccounts() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user }
+      } = await supabase.auth.getUser()
       setMyId(user.id)
-
       const accs = await getMyAccounts()
       setAccounts(accs)
-      if (accs.length && !accountId) {
+      if (accs.length) {
         setAccountId(accs[0].id)
         setWorkedBy(user.id)
       }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoadingAccounts(false)
+    }
+  }
 
-      const ents = await getEntries({ start: fromNowISO(13) })
+  async function loadEntries(days) {
+    setLoadingEntries(true)
+    try {
+      const start = days ? isoDaysAgo(days - 1) : undefined
+      const ents = await getEntries(start ? { start } : {})
       setEntries(ents)
     } catch (err) {
       setError(err.message)
     } finally {
-      setLoading(false)
+      setLoadingEntries(false)
     }
   }
 
   useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadAccounts()
   }, [])
+
+  useEffect(() => {
+    loadEntries(listDays)
+  }, [listDays])
 
   const selectedAccount = accounts.find((a) => a.id === accountId)
   const members = selectedAccount?.account_members || []
@@ -67,12 +88,14 @@ export default function Log() {
     if (!accountId || !hours) return
     setSaving(true)
     setError('')
+    setNotice('')
     try {
       await createEntry({ account_id: accountId, worked_by: workedBy, entry_date: date, hours, paid, note })
+      setNotice(`Logged ${hours}h on ${selectedAccount?.name || 'account'} for ${formatDateLabel(date)}`)
       setHours('')
       setNote('')
       setPaid(false)
-      await load()
+      await loadEntries(listDays)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -110,9 +133,9 @@ export default function Log() {
   return (
     <div>
       <h1 className="page-title">Log hours</h1>
-      <p className="page-sub">Quick entry, last 14 days across every account you're in.</p>
+      <p className="page-sub">Pick any date to log against. The list below shows the range you choose.</p>
 
-      {accounts.length === 0 && !loading ? (
+      {accounts.length === 0 && !loadingAccounts ? (
         <div className="card">
           <p style={{ margin: 0, color: 'var(--text-dim)' }}>
             You're not on any accounts yet. Create one or join with a code on the Accounts page.
@@ -185,14 +208,27 @@ export default function Log() {
               {saving ? 'Saving...' : 'Add entry'}
             </button>
           </div>
+          {notice && <p style={{ color: 'var(--mint)', fontSize: 13 }}>{notice}</p>}
           {error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</p>}
         </form>
       )}
 
-      {loading ? (
+      <div className="range-tabs" style={{ flexWrap: 'wrap' }}>
+        {LIST_RANGES.map((r) => (
+          <button
+            key={r.days}
+            className={listDays === r.days ? 'active' : ''}
+            onClick={() => setListDays(r.days)}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {loadingEntries ? (
         <p className="empty-state">Loading...</p>
       ) : dates.length === 0 ? (
-        <p className="empty-state">No entries in the last 14 days yet.</p>
+        <p className="empty-state">No entries in this range yet.</p>
       ) : (
         dates.map((d) => (
           <div className="entry-group" key={d}>
@@ -209,8 +245,7 @@ export default function Log() {
                   {entry.note && <div className="entry-meta">{entry.note}</div>}
                 </div>
                 <div className="entry-hours mono">
-                  {entry.hours}h · {entry.accounts?.currency}
-                  {(entry.hours * entry.accounts?.hourly_rate).toFixed(2)}
+                  {entry.hours}h · {money(entry.accounts?.currency, entry.hours * entry.accounts?.hourly_rate)}
                 </div>
                 <button
                   className={`entry-paid-toggle ${entry.paid ? 'paid' : ''}`}
