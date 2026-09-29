@@ -88,6 +88,20 @@ export function togglePaid(id, paid) {
   )
 }
 
+export function markPeriodPaid(accountId, workedBy, start, end) {
+  return authedFetch('/api/mark-paid', {
+    method: 'POST',
+    body: JSON.stringify({ account_id: accountId, worked_by: workedBy, start, end })
+  })
+}
+
+export function bulkMarkPaid({ account_id, worked_by, start, end, paid }) {
+  return authedFetch('/api/entries', {
+    method: 'PATCH',
+    body: JSON.stringify({ account_id, worked_by, start, end, paid })
+  }).then((r) => r.updated)
+}
+
 export function deleteEntry(id) {
   return authedFetch('/api/entries', { method: 'DELETE', body: JSON.stringify({ id }) })
 }
