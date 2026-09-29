@@ -384,6 +384,21 @@ button {
   color: var(--amber);
 }
 
+.stat-card.primary {
+  grid-column: 1 / -1;
+  background: rgba(61, 220, 151, 0.08);
+  border-color: var(--mint);
+}
+
+.stat-card.primary .label {
+  font-size: 13px;
+  color: var(--mint);
+}
+
+.stat-card.primary .value {
+  font-size: 32px;
+}
+
 .section-title {
   font-size: 13px;
   color: var(--text-dim);

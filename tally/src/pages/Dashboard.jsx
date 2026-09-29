@@ -257,12 +257,23 @@ export default function Dashboard() {
       ) : (
         <>
           <div className="stat-grid">
-            <div className="stat-card">
-              <div className="label">Your hours</div>
-              <div className="value">{mineHours.toFixed(1)}h</div>
+            <div className="stat-card primary">
+              <div className="label">Your balance (unpaid to you)</div>
+              {mineCurrencies.filter((c) => mine[c].unpaid > 0).length === 0 ? (
+                <div className="value">{money(mineCurrencies[0] || '$', 0)}</div>
+              ) : (
+                mineCurrencies
+                  .filter((c) => mine[c].unpaid > 0)
+                  .map((c) => (
+                    <div className="value" key={c}>
+                      {money(c, mine[c].unpaid)}
+                    </div>
+                  ))
+              )}
             </div>
+
             <div className="stat-card">
-              <div className="label">You're owed</div>
+              <div className="label">Total earned this period</div>
               {mineCurrencies.length === 0 ? (
                 <div className="value">{money('$', 0)}</div>
               ) : (
@@ -273,23 +284,15 @@ export default function Dashboard() {
                 ))
               )}
             </div>
-            <div className="stat-card unpaid">
-              <div className="label">Still unpaid to you</div>
-              {mineCurrencies.filter((c) => mine[c].unpaid > 0).length === 0 ? (
-                <div className="value">{money(mineCurrencies[0] || '$', 0)}</div>
-              ) : (
-                mineCurrencies
-                  .filter((c) => mine[c].unpaid > 0)
-                  .map((c) => (
-                    <div className="value" key={c} style={{ fontSize: 18 }}>
-                      {money(c, mine[c].unpaid)}
-                    </div>
-                  ))
-              )}
+
+            <div className="stat-card">
+              <div className="label">Hours logged</div>
+              <div className="value">{mineHours.toFixed(1)}h</div>
             </div>
+
             {anyOwed && (
               <div className="stat-card unpaid">
-                <div className="label">You owe others</div>
+                <div className="label">You owe others (unpaid)</div>
                 {oweCurrencies
                   .filter((c) => owedToOthers[c].unpaid > 0)
                   .map((c) => (
